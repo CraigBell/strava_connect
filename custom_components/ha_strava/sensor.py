@@ -21,6 +21,7 @@ from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
 
 # custom module imports
 from .const import (
+    CONF_ACTIVITES_RIDE,
     CONF_ACTIVITY_TYPE_CANOEING,
     CONF_ACTIVITY_TYPE_GOLF,
     CONF_ACTIVITY_TYPE_GYM,
@@ -83,6 +84,7 @@ from .const import (
     UNIT_KILO_CALORIES,
     UNIT_PACE_MINUTES_PER_KILOMETER,
     UNIT_PACE_MINUTES_PER_MILE,
+    UNIT_REVOLUTIONS_PER_MINUTE,
     UNIT_STEPS_PER_MINUTE,
 )
 
@@ -539,7 +541,13 @@ class StravaStatsSensor(SensorEntity):  # pylint: disable=missing-class-docstrin
 
         if metric == CONF_SENSOR_CADENCE_AVG:
             return (
-                round(self._data[CONF_SENSOR_CADENCE_AVG], 1)
+                round(
+                    (
+                        self._data[CONF_SENSOR_CADENCE_AVG]
+                        if self._data[CONF_ATTR_SPORT_TYPE].lower() in CONF_ACTIVITES_RIDE
+                        else self._data[CONF_SENSOR_CADENCE_AVG] * 2
+                    ), 1
+                )
                 if (self._data[CONF_SENSOR_CADENCE_AVG] != float(-1))
                 else None
             )
@@ -598,7 +606,11 @@ class StravaStatsSensor(SensorEntity):  # pylint: disable=missing-class-docstrin
             return UNIT_KILO_CALORIES
 
         if metric == CONF_SENSOR_CADENCE_AVG:
-            return UNIT_STEPS_PER_MINUTE
+            return (
+                UNIT_REVOLUTIONS_PER_MINUTE
+                if self._data[CONF_ATTR_SPORT_TYPE].lower() in CONF_ACTIVITES_RIDE 
+                else UNIT_STEPS_PER_MINUTE
+            )
 
         return None
 
