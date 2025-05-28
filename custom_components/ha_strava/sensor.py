@@ -78,6 +78,7 @@ from .const import (
     DOMAIN,
     EVENT_ACTIVITIES_UPDATE,
     EVENT_SUMMARY_STATS_UPDATE,
+    FACTOR_KILOMETER_TO_MILE,
     MAX_NB_ACTIVITIES,
     STRAVA_ACTHLETE_BASE_URL,
     STRAVA_ACTIVITY_BASE_URL,
@@ -448,46 +449,32 @@ class StravaStatsSensor(SensorEntity):  # pylint: disable=missing-class-docstrin
             )
 
         if metric == CONF_SENSOR_PACE:
-            distance = self._data[CONF_SENSOR_DISTANCE]
-            pace = (
-                0
-                if distance == 0
-                else self._data[CONF_SENSOR_MOVING_TIME]
-                / (self._data[CONF_SENSOR_DISTANCE] / 1000)
+            distance_val = self._data[CONF_SENSOR_DISTANCE]
+            moving_time_val = self._data[CONF_SENSOR_MOVING_TIME]
+
+            pace_s_per_km = (
+                0 if distance_val == 0 else moving_time_val / (distance_val / 1000)
             )
 
-            pace_imperial = DistanceConverter.convert(
-                pace, UnitOfLength.KILOMETERS, UnitOfLength.MILES
-            )
+            if not self._is_unit_metric:  # Target is imperial
+                if FACTOR_KILOMETER_TO_MILE == 0:  # Avoid division by zero
+                    pace_final_numeric = 0
+                else:
+                    pace_final_numeric = pace_s_per_km / FACTOR_KILOMETER_TO_MILE
+                unit_for_display = UNIT_PACE_MINUTES_PER_MILE
+            else:  # Target is metric
+                pace_final_numeric = pace_s_per_km
+                unit_for_display = UNIT_PACE_MINUTES_PER_KILOMETER
 
-            if self._is_unit_metric_default:
-                pace_final = (
-                    pace_imperial
-                    if self.hass.config.units is US_CUSTOMARY_SYSTEM
-                    else pace
-                )
-            else:
-                pace_final = pace if self._is_unit_metric else pace_imperial
-
-            minutes = int(pace_final // 60)
-            seconds = int(pace_final - minutes * 60)
-
-            unit = (
-                (
-                    UNIT_PACE_MINUTES_PER_MILE
-                    if self.hass.config.units is US_CUSTOMARY_SYSTEM
-                    else UNIT_PACE_MINUTES_PER_KILOMETER
-                )
-                if self._is_unit_metric_default
-                else (
-                    UNIT_PACE_MINUTES_PER_KILOMETER
-                    if self._is_unit_metric
-                    else UNIT_PACE_MINUTES_PER_MILE
-                )
-            )
+            minutes = int(pace_final_numeric // 60)
+            seconds = int(pace_final_numeric - minutes * 60)
 
             return "".join(
-                ["0:" if minutes == 0 else f"{minutes}:", f"{seconds:02}", f" {unit}"]
+                [
+                    "0:" if minutes == 0 else f"{minutes}:",
+                    f"{seconds:02}",
+                    f" {unit_for_display}",
+                ]
             )
 
         if metric == CONF_SENSOR_SPEED:
@@ -577,19 +564,19 @@ class StravaStatsSensor(SensorEntity):  # pylint: disable=missing-class-docstrin
         if metric in [CONF_SENSOR_HEART_RATE_MAX, CONF_SENSOR_HEART_RATE_AVG]:
             return UNIT_BEATS_PER_MINUTE
 
-        # if metric == CONF_SENSOR_PACE:
-        #     if self._is_unit_metric_default:
-        #         return (
-        #             UNIT_PACE_MINUTES_PER_MILE
-        #             if self.hass.config.units is US_CUSTOMARY_SYSTEM
-        #             else UNIT_PACE_MINUTES_PER_KILOMETER
-        #         )
+        if metric == CONF_SENSOR_PACE:
+            if self._is_unit_metric_default:
+                return (
+                    UNIT_PACE_MINUTES_PER_MILE
+                    if self.hass.config.units is US_CUSTOMARY_SYSTEM
+                    else UNIT_PACE_MINUTES_PER_KILOMETER
+                )
 
-        #     return (
-        #         UNIT_PACE_MINUTES_PER_KILOMETER
-        #         if self._is_unit_metric
-        #         else UNIT_PACE_MINUTES_PER_MILE
-        #     )
+            return (
+                UNIT_PACE_MINUTES_PER_KILOMETER
+                if self._is_unit_metric
+                else UNIT_PACE_MINUTES_PER_MILE
+            )
 
         if metric == CONF_SENSOR_CALORIES:
             return UNIT_KILO_CALORIES
