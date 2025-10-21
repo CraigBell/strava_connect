@@ -1,6 +1,8 @@
 """Sensor platform for HA Strava"""
 
 import logging
+from datetime import datetime as dt
+from datetime import timezone
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.const import UnitOfLength, UnitOfSpeed, UnitOfTime
@@ -15,8 +17,11 @@ from .const import (
     CONF_ATTR_ACTIVITY_URL,
     CONF_ATTR_COMMUTE,
     CONF_ATTR_LOCATION,
+    CONF_ATTR_POD_1_SHOE,
+    CONF_ATTR_POD_2_SHOE,
     CONF_ATTR_POLYLINE,
     CONF_ATTR_PRIVATE,
+    CONF_ATTR_SHOES,
     CONF_ATTR_SPORT_TYPE,
     CONF_ATTR_START_LATLONG,
     CONF_ATTRIBUTE_SENSOR_TYPES,
@@ -51,6 +56,7 @@ from .const import (
     CONF_SENSOR_MOVING_TIME,
     CONF_SENSOR_PACE,
     CONF_SENSOR_POWER,
+    CONF_SENSOR_SHOES_CATALOG,
     CONF_SENSOR_SPEED,
     CONF_SENSOR_TITLE,
     DEFAULT_ACTIVITY_TYPES,
@@ -73,6 +79,7 @@ from .const import (
     normalize_activity_type,
 )
 from .coordinator import StravaDataUpdateCoordinator
+from .gear import enforce_mutual_exclusivity, resolve_shoes_for_pod
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -232,6 +239,14 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 athlete_id=athlete_id,
             )
         )
+
+    # Create shoes catalog sensor aggregating all shoes and Stryd mappings
+    entries.append(
+        StravaShoesCatalogSensor(
+            coordinator=coordinator,
+            athlete_id=athlete_id,
+        )
+    )
 
     async_add_entities(entries)
 
@@ -901,6 +916,89 @@ class StravaActivityDateSensor(StravaActivityAttributeSensor):
         return {
             CONF_ATTR_ACTIVITY_ID: activity_id,
         }
+
+
+class StravaShoesCatalogSensor(CoordinatorEntity, SensorEntity):
+    """Sensor that exposes the athlete's shoes catalog and pod selections."""
+
+    _attr_icon = "mdi:shoe-print"
+
+    def __init__(
+        self,
+        coordinator: StravaDataUpdateCoordinator,
+        athlete_id: str,
+    ):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._athlete_id = athlete_id
+        self._athlete_name = get_athlete_name_from_title(self.coordinator.entry.title)
+        self._attr_unique_id = f"strava_{athlete_id}_{CONF_SENSOR_SHOES_CATALOG}"
+        self._attr_name = generate_device_name(self._athlete_name, "Shoes Catalog")
+
+    @property
+    def device_info(self):
+        """Return device information."""
+        return {
+            "identifiers": {(DOMAIN, generate_device_id(self._athlete_id, "shoes"))},
+            "name": generate_device_name(self._athlete_name, "Shoes Catalog"),
+            "manufacturer": "Powered by Strava",
+            "model": "Shoes Catalog",
+            "configuration_url": f"{STRAVA_ACTHLETE_BASE_URL}{self._athlete_id}",
+        }
+
+    @staticmethod
+    def _current_timestamp() -> str:
+        """Return an ISO8601 timestamp in UTC."""
+        return (
+            dt.now(timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+
+    @property
+    def native_value(self):
+        """Return the last refresh timestamp from the catalog."""
+        catalog = (
+            self.coordinator.data.get("shoes_catalog")
+            if self.coordinator.data
+            else None
+        )
+        if not catalog:
+            return self._current_timestamp()
+        return catalog.get("last_refresh") or self._current_timestamp()
+
+    @property
+    def extra_state_attributes(self):
+        """Return catalog details including effective pod selections."""
+        catalog = (
+            self.coordinator.data.get("shoes_catalog")
+            if self.coordinator.data
+            else None
+        )
+        shoes = catalog.get(CONF_ATTR_SHOES, []) if catalog else []
+
+        pod_1_selection = self._get_helper_state("input_select.stryd_pod_1_shoes")
+        pod_2_selection = self._get_helper_state("input_select.stryd_pod_2_shoes")
+        pod_1_selection, pod_2_selection = enforce_mutual_exclusivity(
+            pod_1_selection, pod_2_selection
+        )
+
+        pod_1_shoe = resolve_shoes_for_pod("pod_1", shoes, pod_1_selection)
+        pod_2_shoe = resolve_shoes_for_pod("pod_2", shoes, pod_2_selection)
+
+        return {
+            CONF_ATTR_SHOES: [dict(shoe) for shoe in shoes],
+            CONF_ATTR_POD_1_SHOE: pod_1_shoe,
+            CONF_ATTR_POD_2_SHOE: pod_2_shoe,
+        }
+
+    def _get_helper_state(self, entity_id: str) -> str | None:
+        """Return helper state if available."""
+        state = self.hass.states.get(entity_id)
+        if not state or state.state in {"unknown", "unavailable", ""}:
+            return None
+        return state.state
 
 
 class StravaActivityMetricSensor(StravaActivityAttributeSensor):

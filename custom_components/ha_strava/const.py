@@ -4,6 +4,8 @@ import re
 
 DOMAIN = "ha_strava"
 CONFIG_ENTRY_TITLE = "Strava"
+SERVICE_DOMAIN = "strava_connect"
+SERVICE_SET_POD_SHOES = "set_pod_shoes"
 
 # OAuth Specs
 AUTH_CALLBACK_PATH = "/auth/external/callback"
@@ -35,6 +37,7 @@ DEFAULT_ACTIVITY_TYPES = ["Run", "Ride", "Swim"]
 
 STRAVA_ACTIVITY_BASE_URL = "https://www.strava.com/activities/"
 STRAVA_ACTHLETE_BASE_URL = "https://www.strava.com/dashboard"
+STRAVA_GEAR_BASE_URL = "https://www.strava.com/gear/"
 
 # Event Specs
 CONF_STRAVA_DATA_UPDATE_EVENT = "strava_data_update"
@@ -163,6 +166,11 @@ CONF_SENSOR_GEAR_DISTANCE = "gear_distance"
 CONF_SENSOR_GEAR_DESCRIPTION = "gear_description"
 CONF_SENSOR_GEAR_PRIMARY = "gear_primary"
 CONF_SENSOR_GEAR_FRAME_TYPE = "gear_frame_type"
+CONF_SENSOR_SHOES_CATALOG = "shoes_catalog"
+
+CONF_ATTR_SHOES = "shoes"
+CONF_ATTR_POD_1_SHOE = "pod_1_shoe"
+CONF_ATTR_POD_2_SHOE = "pod_2_shoe"
 
 CONF_SENSORS = {
     CONF_SENSOR_DATE: {"icon": "mdi:run"},

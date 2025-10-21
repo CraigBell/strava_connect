@@ -8,3 +8,6 @@ black
 flake8
 pre-commit
 pylint
+aioresponses
+pytest-asyncio
+pytest-homeassistant-custom-component

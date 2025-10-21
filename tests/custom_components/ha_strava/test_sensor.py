@@ -10,6 +10,9 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.ha_strava.const import (
     CONF_ACTIVITY_TYPES_TO_TRACK,
     CONF_ATTR_ACTIVITY_ID,
+    CONF_ATTR_POD_1_SHOE,
+    CONF_ATTR_POD_2_SHOE,
+    CONF_ATTR_SHOES,
     CONF_DISTANCE_UNIT_OVERRIDE,
     CONF_DISTANCE_UNIT_OVERRIDE_METRIC,
     DOMAIN,
@@ -17,6 +20,7 @@ from custom_components.ha_strava.const import (
 from custom_components.ha_strava.sensor import (
     StravaActivityGearSensor,
     StravaActivityTypeSensor,
+    StravaShoesCatalogSensor,
     StravaSummaryStatsSensor,
     async_setup_entry,
 )
@@ -358,9 +362,9 @@ class TestSensorPlatform:
             # Should create main activity sensors + individual attribute sensors + summary stats sensors
             # + recent activity sensors
             # 4 activity types × (1 main + 15 attribute + 1 gear) + 35 summary stats + 1 recent activity device
-            # (1 main + 15 attribute + 1 gear)
-            # = 68 + 35 + 17 = 120 sensors total
-            expected_sensor_count = 120
+            # (1 main + 15 attribute + 1 gear) + 1 shoes catalog sensor
+            # = 68 + 35 + 17 + 1 = 121 sensors total
+            expected_sensor_count = 121
             assert len(call_args) == expected_sensor_count
 
             # Verify that different sensor types are created
@@ -376,6 +380,7 @@ class TestSensorPlatform:
             assert "StravaRecentActivityDeviceInfoSensor" in sensor_types
             assert "StravaRecentActivityDateSensor" in sensor_types
             assert "StravaRecentActivityMetricSensor" in sensor_types
+            assert "StravaShoesCatalogSensor" in sensor_types
 
     @pytest.mark.asyncio
     async def test_async_setup_entry_with_activity_types(
@@ -504,6 +509,111 @@ class TestSensorPlatform:
 
         await async_setup_entry(hass, config_entry, AsyncMock())
         # Function doesn't return a value, just completes successfully
+
+
+class DummyState:
+    """Container mimicking a Home Assistant state."""
+
+    def __init__(self, value: str):
+        self.state = value
+
+
+class DummyStates:
+    """Mapping-like helper to stub hass.states."""
+
+    def __init__(self, mapping: dict[str, DummyState]):
+        self._mapping = mapping
+
+    def get(self, entity_id: str):
+        return self._mapping.get(entity_id)
+
+
+class TestStravaShoesCatalogSensor:
+    """Test StravaShoesCatalogSensor class."""
+
+    def _build_sensor(self, catalog: dict | None, helper_states: dict | None = None):
+        coordinator = MagicMock()
+        coordinator.data = {"shoes_catalog": catalog} if catalog else {}
+        entry = MagicMock()
+        entry.title = "Strava: Test User"
+        entry.options = {}
+        coordinator.entry = entry
+
+        sensor = StravaShoesCatalogSensor(coordinator=coordinator, athlete_id="12345")
+        hass = MagicMock()
+        hass.states = DummyStates(helper_states or {})
+        sensor.hass = hass
+        return sensor
+
+    def test_native_value_uses_catalog_timestamp(self):
+        """State should mirror the catalog's last refresh timestamp."""
+        shoes = [
+            {
+                "id": "shoe-1",
+                "name": "Daily Trainer",
+                "brand": "BrandA",
+                "model": "ModelX",
+                "distance_m": 1000,
+                "retired": False,
+                "primary": True,
+                "strava_url": "https://www.strava.com/gear/shoe-1",
+            }
+        ]
+        catalog = {"last_refresh": "2024-01-01T00:00:00Z", CONF_ATTR_SHOES: shoes}
+        sensor = self._build_sensor(catalog)
+
+        assert sensor.native_value == "2024-01-01T00:00:00Z"
+        attributes = sensor.extra_state_attributes
+        assert attributes[CONF_ATTR_SHOES] == shoes
+        assert attributes[CONF_ATTR_POD_1_SHOE] is None
+        assert attributes[CONF_ATTR_POD_2_SHOE] is None
+
+    def test_mutual_exclusivity_with_helper_states(self):
+        """Only one pod should retain a shoe if both select the same name."""
+        shoes = [
+            {
+                "id": "shoe-1",
+                "name": "Daily Trainer",
+                "brand": "BrandA",
+                "model": "ModelX",
+                "distance_m": 1000,
+                "retired": False,
+                "primary": True,
+                "strava_url": "https://www.strava.com/gear/shoe-1",
+            },
+            {
+                "id": "shoe-2",
+                "name": "Tempo Shoe",
+                "brand": "BrandB",
+                "model": "ModelY",
+                "distance_m": 800,
+                "retired": False,
+                "primary": False,
+                "strava_url": "https://www.strava.com/gear/shoe-2",
+            },
+        ]
+        catalog = {"last_refresh": "2024-01-02T00:00:00Z", CONF_ATTR_SHOES: shoes}
+        helper_states = {
+            "input_select.stryd_pod_1_shoes": DummyState("Daily Trainer"),
+            "input_select.stryd_pod_2_shoes": DummyState("Daily Trainer"),
+        }
+
+        sensor = self._build_sensor(catalog, helper_states)
+        attributes = sensor.extra_state_attributes
+
+        assert attributes[CONF_ATTR_POD_1_SHOE]["name"] == "Daily Trainer"
+        assert attributes[CONF_ATTR_POD_2_SHOE] is None
+
+    def test_missing_catalog_defaults(self):
+        """Gracefully handle absence of catalog data."""
+        sensor = self._build_sensor(None, None)
+        state = sensor.native_value
+        assert isinstance(state, str) and state.endswith("Z")
+
+        attributes = sensor.extra_state_attributes
+        assert attributes[CONF_ATTR_SHOES] == []
+        assert attributes[CONF_ATTR_POD_1_SHOE] is None
+        assert attributes[CONF_ATTR_POD_2_SHOE] is None
 
     @pytest.mark.asyncio
     async def test_async_setup_entry_empty_activity_types(self, hass: HomeAssistant):

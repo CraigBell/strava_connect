@@ -3,6 +3,7 @@
 import json
 import logging
 from datetime import datetime as dt
+from datetime import timezone
 from typing import Tuple
 
 import aiohttp
@@ -16,6 +17,7 @@ from .const import (
     CONF_ATTR_END_LATLONG,
     CONF_ATTR_POLYLINE,
     CONF_ATTR_PRIVATE,
+    CONF_ATTR_SHOES,
     CONF_ATTR_SPORT_TYPE,
     CONF_ATTR_START_LATLONG,
     CONF_PHOTOS,
@@ -53,6 +55,7 @@ from .const import (
     OAUTH2_AUTHORIZE,
     OAUTH2_TOKEN,
 )
+from .gear import normalize_shoe
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,6 +63,7 @@ _PHOTOS_URL_TEMPLATE = (
     f"https://www.strava.com/api/v3/activities/%s/photos?size={CONFIG_IMG_SIZE}"
 )
 _STATS_URL_TEMPLATE = "https://www.strava.com/api/v3/athletes/%s/stats"
+_ATHLETE_URL = "https://www.strava.com/api/v3/athlete"
 
 
 class StravaDataUpdateCoordinator(DataUpdateCoordinator):
@@ -106,12 +110,16 @@ class StravaDataUpdateCoordinator(DataUpdateCoordinator):
             athlete_id, activities = await self._fetch_activities()
             raw_summary_stats = await self._fetch_summary_stats(athlete_id)
             summary_stats = self._sensor_summary_stats(raw_summary_stats)
+            athlete_profile = await self._fetch_athlete()
+            shoes_catalog = self._build_shoes_catalog(athlete_profile.get("shoes"))
             images = await self._fetch_images(activities)
 
             return {
                 "activities": activities,
                 "summary_stats": summary_stats,
                 "images": images,
+                "athlete": athlete_profile,
+                "shoes_catalog": shoes_catalog,
             }
         except aiohttp.ClientError as err:
             _LOGGER.error(f"Error communicating with API: {err}")
@@ -255,6 +263,38 @@ class StravaDataUpdateCoordinator(DataUpdateCoordinator):
         except (aiohttp.ClientError, ValueError, KeyError) as e:
             _LOGGER.warning(f"Error fetching gear {gear_id}: {e}")
             return {}
+
+    async def _fetch_athlete(self) -> dict:
+        """Fetch athlete profile details (including shoes catalog)."""
+        try:
+            response = await self.oauth_session.async_request(
+                method="GET",
+                url=_ATHLETE_URL,
+            )
+            response.raise_for_status()
+            athlete = await response.json()
+            return athlete or {}
+        except aiohttp.ClientError as err:
+            _LOGGER.warning(f"Failed to fetch athlete profile: {err}")
+            return {}
+
+    def _build_shoes_catalog(self, shoes: list[dict] | None) -> dict:
+        """Normalise shoes list and stamp the last refresh timestamp."""
+        timestamp = (
+            dt.now(timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+
+        if not shoes:
+            return {CONF_ATTR_SHOES: [], "last_refresh": timestamp}
+
+        normalized = [normalize_shoe(shoe) for shoe in shoes]
+        return {
+            CONF_ATTR_SHOES: normalized,
+            "last_refresh": timestamp,
+        }
 
     def _sensor_activity(self, activity: dict, activity_dto: dict) -> dict:
         # Extract device information

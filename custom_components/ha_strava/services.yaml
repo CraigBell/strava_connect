@@ -1,0 +1,10 @@
+set_pod_shoes:
+  name: Set Stryd Pod Shoes
+  description: Validate shoe selections for the configured Stryd pods.
+  fields:
+    pod_1_shoes:
+      description: Friendly shoe name to assign to pod 1.
+      example: Daily Trainer
+    pod_2_shoes:
+      description: Friendly shoe name to assign to pod 2.
+      example: Tempo Shoe
