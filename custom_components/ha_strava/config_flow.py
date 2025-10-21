@@ -1,4 +1,4 @@
-"""Config flow for Strava Home Assistant."""
+"""Config flow for Strava Connect."""
 
 # generic imports
 import logging

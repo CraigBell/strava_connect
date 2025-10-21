@@ -1,17 +1,17 @@
 {
   "config": {
-    "title": "Strava Home Assistant Integration (Unofficial)",
+    "title": "Strava Connect",
     "create_entry": {
-      "default": "Your Strava Home Assistant Integration has been successfully installed"
+      "default": "Strava Connect has been successfully installed"
     },
     "abort": {
-      "already_configured": "A Strava Home Assistant Integration has already been installed. You can only have one installation at a time",
-      "no_public_url": "Your Home Assistant Instance does not seem to have a public URL. The Strava Home Assistant integration requires a public URL",
-      "webhook_fail": "Strava Home Assistant failed to subscribe to Strava Webhook"
+      "already_configured": "Strava Connect has already been installed. You can only have one installation at a time",
+      "no_public_url": "Your Home Assistant instance does not seem to have a public URL. Strava Connect requires a public URL",
+      "webhook_fail": "Strava Connect failed to subscribe to the Strava webhook"
     },
     "step": {
       "get_oauth_info": {
-        "title": "Please enter your Strava API Credentials",
+        "title": "Enter your Strava API credentials",
         "description": "You can find more information on how to obtain your Strava API Credentials here: https://www.strava.com/settings/api",
         "data": {
           "client_id": "Client ID",
@@ -26,8 +26,8 @@
   "options": {
     "step": {
       "init": {
-        "title": "Strava Home Assistant Configuration",
-        "description": "Strava Home Assistant integration configurations. You can find more information on the options here: https://github.com/craibo/ha_strava",
+        "title": "Strava Connect options",
+        "description": "Strava Connect configuration options. You can find more information here: https://github.com/craibo/ha_strava",
         "data": {
           "activity_types_to_track": "Activity Types to Track",
           "img_update_interval_seconds": "Image rotation (seconds)",
@@ -37,8 +37,8 @@
       }
     },
     "abort": {
-      "no_config": "Could not find the Strava Home Assistant configuration",
-      "update_success": "The Strava Home Assistant configuration was updated successfully!"
+      "no_config": "Could not find the Strava Connect configuration",
+      "update_success": "Strava Connect configuration updated successfully!"
     }
   }
 }

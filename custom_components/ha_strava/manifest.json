@@ -1,6 +1,6 @@
 {
   "domain": "ha_strava",
-  "name": "Strava (Unofficial)",
+  "name": "Strava Connect",
   "codeowners": ["@craibo"],
   "config_flow": true,
   "dependencies": ["http"],
