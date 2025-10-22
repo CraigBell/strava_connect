@@ -5,20 +5,157 @@ import logging
 from http import HTTPStatus
 
 import aiohttp
+import voluptuous as vol
 from aiohttp.web import Request, Response, json_response
 from homeassistant.components.http.view import HomeAssistantView
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntry
 from homeassistant.const import CONF_CLIENT_ID, CONF_CLIENT_SECRET, CONF_WEBHOOK_ID
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 
-from .const import CONF_CALLBACK_URL, DOMAIN, WEBHOOK_SUBSCRIPTION_URL
+from .api import (
+    StravaApiError,
+    StravaNotFoundError,
+    StravaRateLimitError,
+    StravaUnauthorizedError,
+)
+from .const import (
+    ATTR_ACTIVITY_ID,
+    ATTR_SHOE_ID,
+    ATTR_SHOE_NAME,
+    CONF_ATTR_CATALOG_TIMESTAMP,
+    CONF_ATTR_SHOES,
+    CONF_CALLBACK_URL,
+    CONF_GRANTED_SCOPES,
+    DOMAIN,
+    EVENT_ACTIVITY_GEAR_SET,
+    REQUIRED_STRAVA_SCOPES,
+    SERVICE_SET_ACTIVITY_GEAR,
+    WEBHOOK_SUBSCRIPTION_URL,
+)
 from .coordinator import StravaDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor", "camera"]
+
+SERVICE_SET_ACTIVITY_GEAR_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ACTIVITY_ID): vol.Any(str, int),
+        vol.Optional(ATTR_SHOE_ID): vol.Any(str, int),
+        vol.Optional(ATTR_SHOE_NAME): str,
+    }
+)
+
+
+def _missing_scopes(entry: ConfigEntry) -> set[str]:
+    granted = set(entry.data.get(CONF_GRANTED_SCOPES, []))
+    return set(REQUIRED_STRAVA_SCOPES) - granted
+
+
+def _schedule_reauth(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    hass.async_create_task(
+        hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_REAUTH},
+            data={**entry.data},
+        )
+    )
+
+
+async def _async_handle_set_activity_gear(
+    hass: HomeAssistant, call: ServiceCall
+) -> None:
+    domain_data = hass.data.get(DOMAIN)
+    if not domain_data:
+        raise HomeAssistantError("Strava Connect is not configured.")
+
+    entry_id = call.data.get("config_entry_id")
+    coordinator: StravaDataUpdateCoordinator | None = None
+
+    if entry_id:
+        coordinator = domain_data.get(entry_id)
+    else:
+        # Default to the first coordinator-like object stored for the domain
+        for candidate in domain_data.values():
+            if hasattr(candidate, "async_request_refresh"):
+                coordinator = candidate
+                break
+
+    if coordinator is None:
+        raise HomeAssistantError("No Strava Connect coordinator available.")
+
+    entry = coordinator.entry
+    missing = _missing_scopes(entry)
+    if missing:
+        _LOGGER.error(
+            "Blocking set_activity_gear service; missing scopes: %s", sorted(missing)
+        )
+        _schedule_reauth(hass, entry)
+        raise HomeAssistantError(
+            "Strava authorization is missing required permissions. Please reauthorize the Strava Connect integration."
+        )
+
+    activity_id_raw = call.data[ATTR_ACTIVITY_ID]
+    activity_id = str(activity_id_raw)
+    shoe_id = call.data.get(ATTR_SHOE_ID)
+    shoe_name = call.data.get(ATTR_SHOE_NAME)
+
+    if shoe_id is not None and shoe_id != "":
+        shoe_id = str(shoe_id)
+
+    if not shoe_id and not shoe_name:
+        raise ServiceValidationError("Provide shoe_id or shoe_name to set gear.")
+
+    shoes_catalog = (coordinator.data or {}).get("shoes_catalog", {})
+    shoes = shoes_catalog.get(CONF_ATTR_SHOES, [])
+
+    resolved_shoe_name = shoe_name
+
+    if shoe_name and not shoe_id:
+        match = next((shoe for shoe in shoes if shoe.get("name") == shoe_name), None)
+        if not match:
+            raise HomeAssistantError(
+                f"Shoe named '{shoe_name}' not found in the Strava catalog."
+            )
+        shoe_id = match.get("id")
+        if not shoe_id:
+            raise HomeAssistantError(
+                f"Shoe '{shoe_name}' does not have a Strava id and cannot be assigned."
+            )
+    elif shoe_id and not shoe_name:
+        match = next((shoe for shoe in shoes if shoe.get("id") == shoe_id), None)
+        if match:
+            resolved_shoe_name = match.get("name")
+
+    if not shoe_id:
+        raise ServiceValidationError("A valid shoe_id is required for this service.")
+
+    try:
+        await coordinator.client.async_update_activity_gear(activity_id, shoe_id)
+    except StravaUnauthorizedError as err:
+        _schedule_reauth(hass, entry)
+        raise HomeAssistantError(
+            "Strava authorization missing required permissions. Please reauthorize."
+        ) from err
+    except StravaNotFoundError as err:
+        raise HomeAssistantError("Strava activity not found.") from err
+    except StravaRateLimitError as err:
+        raise HomeAssistantError("Strava rate limit reached. Try again later.") from err
+    except StravaApiError as err:
+        raise HomeAssistantError(f"Failed to update Strava activity: {err}") from err
+
+    event_data = {
+        ATTR_ACTIVITY_ID: activity_id,
+        ATTR_SHOE_ID: shoe_id,
+        ATTR_SHOE_NAME: resolved_shoe_name,
+        CONF_ATTR_CATALOG_TIMESTAMP: shoes_catalog.get(CONF_ATTR_CATALOG_TIMESTAMP),
+    }
+    hass.bus.async_fire(EVENT_ACTIVITY_GEAR_SET, event_data)
+
+    hass.async_create_task(coordinator.async_request_refresh())
 
 
 class StravaWebhookView(HomeAssistantView):
@@ -195,6 +332,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
+    missing = _missing_scopes(entry)
+    if missing:
+        _LOGGER.warning(
+            "Strava Connect entry missing required scopes: %s", sorted(missing)
+        )
+        _schedule_reauth(hass, entry)
+
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_ACTIVITY_GEAR):
+
+        async def handle_service(call: ServiceCall) -> None:
+            await _async_handle_set_activity_gear(hass, call)
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_ACTIVITY_GEAR,
+            handle_service,
+            schema=SERVICE_SET_ACTIVITY_GEAR_SCHEMA,
+        )
+
     # Set up webhook
     hass.http.register_view(StravaWebhookView(hass))
     await renew_webhook_subscription(hass, entry)
@@ -226,5 +382,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
                 _LOGGER.error(f"Failed to delete webhook subscription: {err}")
 
         hass.data[DOMAIN].pop(entry.entry_id)
+
+        if not hass.data[DOMAIN] and hass.services.has_service(
+            DOMAIN, SERVICE_SET_ACTIVITY_GEAR
+        ):
+            hass.services.async_remove(DOMAIN, SERVICE_SET_ACTIVITY_GEAR)
 
     return unload_ok

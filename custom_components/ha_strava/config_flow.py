@@ -27,6 +27,7 @@ from .const import (
     CONF_DISTANCE_UNIT_OVERRIDE_DEFAULT,
     CONF_DISTANCE_UNIT_OVERRIDE_IMPERIAL,
     CONF_DISTANCE_UNIT_OVERRIDE_METRIC,
+    CONF_GRANTED_SCOPES,
     CONF_IMG_UPDATE_INTERVAL_SECONDS,
     CONF_IMG_UPDATE_INTERVAL_SECONDS_DEFAULT,
     CONF_PHOTOS,
@@ -34,6 +35,8 @@ from .const import (
     DOMAIN,
     OAUTH2_AUTHORIZE,
     OAUTH2_TOKEN,
+    REQUIRED_SCOPE_STRING,
+    REQUIRED_STRAVA_SCOPES,
     SUPPORTED_ACTIVITY_TYPES,
 )
 
@@ -44,6 +47,22 @@ DISTANCE_UNIT_OVERRIDE_OPTIONS = [
     CONF_DISTANCE_UNIT_OVERRIDE_METRIC,
     CONF_DISTANCE_UNIT_OVERRIDE_IMPERIAL,
 ]
+
+
+def _parse_scope_values(value) -> set[str]:
+    """Return a normalized set of Strava OAuth scopes."""
+    if value is None:
+        return set()
+
+    if isinstance(value, str):
+        # Strava returns scopes as comma-separated string
+        tokens = value.replace(" ", ",").split(",")
+        return {token.strip() for token in tokens if token.strip()}
+
+    if isinstance(value, (list, tuple, set)):
+        return {str(item).strip() for item in value if str(item).strip()}
+
+    return set()
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
@@ -223,7 +242,7 @@ class OAuth2FlowHandler(
     def extra_authorize_data(self) -> dict:
         """Extra data that needs to be appended to the authorize url."""
         return {
-            "scope": "activity:read_all",
+            "scope": REQUIRED_SCOPE_STRING,
             "approval_prompt": "force",
             "response_type": "code",
         }
@@ -282,6 +301,12 @@ class OAuth2FlowHandler(
 
     async def async_oauth_create_entry(self, data: dict) -> dict:
         """Create an entry for the flow."""
+        granted_scopes = _parse_scope_values(data.get("token", {}).get("scope"))
+        missing_scopes = set(REQUIRED_STRAVA_SCOPES) - granted_scopes
+        if missing_scopes:
+            _LOGGER.error("Missing required Strava scopes: %s", sorted(missing_scopes))
+            return self.async_abort(reason="missing_scopes")
+
         # Fetch athlete info
         headers = {
             "Authorization": f"Bearer {data['token']['access_token']}",
@@ -307,6 +332,7 @@ class OAuth2FlowHandler(
         data[CONF_PHOTOS] = self._import_photos_from_strava
         data[CONF_DISTANCE_UNIT_OVERRIDE] = self._distance_unit_override
         data[CONF_ACTIVITY_TYPES_TO_TRACK] = self._activity_types_to_track
+        data[CONF_GRANTED_SCOPES] = sorted(granted_scopes)
 
         return self.async_create_entry(title=title, data=data)
 

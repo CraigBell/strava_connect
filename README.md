@@ -17,6 +17,13 @@ Strava Connect keeps your Home Assistant instance in sync with Strava: it stream
 - **Stryd companion tooling**: map Bluetooth pods to shoes via `input_select` helpers and surface the resolved pairings as catalog attributes.
 - **Webhook-first architecture** that avoids polling and stays within Strava API quotas.
 
+## MVP Features
+
+- Dynamic **Shoes Catalog** sensor with normalized gear metadata and pod helper attributes.
+- Two optional `input_select` helpers for maintaining Stryd pod ↔ shoe assignments without conflicts.
+- New Home Assistant service `ha_strava.set_activity_gear` to update historical activities with the right shoe.
+- Enforced Strava OAuth scopes with automatic reauthorization prompts when permissions shrink.
+
 ## Installation (HACS)
 
 1. Make sure your Home Assistant instance is reachable from the internet (required for Strava webhooks).
@@ -35,6 +42,36 @@ Strava Connect keeps your Home Assistant instance in sync with Strava: it stream
 - Full configuration details, options, and contribution guidelines are available in the [project wiki](https://github.com/CraigBell/strava_connect/wiki).
 - Issues and feature requests: [GitHub Issues](https://github.com/CraigBell/strava_connect/issues).
 - Community discussion: join the [Home Assistant forums](https://community.home-assistant.io/) and search for _Strava Connect_.
+
+## Service: `ha_strava.set_activity_gear`
+
+Assign the correct shoe to a Strava activity directly from Home Assistant. Provide either a `shoe_id` or a `shoe_name` that exists in the shoes catalog sensor.
+
+```yaml
+service: ha_strava.set_activity_gear
+data:
+  activity_id: "1234567890"
+  shoe_name: "Nike Pegasus 40"
+```
+
+On success the integration fires an event `ha_strava.activity_gear_set` which you can use for automations.
+
+## Required Strava Scopes
+
+Authorize with the full scope string to unlock gear read/write support:
+
+```
+read,read_all,profile:read_all,activity:read_all,activity:write
+```
+
+If any scope is missing, the integration blocks gear writes and prompts for reauthorization via the Home Assistant UI.
+
+## Troubleshooting
+
+- **Missing shoes or bikes?** Reauthorize with the `profile:read_all` scope.
+- **403 when setting gear?** Ensure the app has `activity:write`; reauthorize if necessary.
+- **429 rate limit warnings?** Strava quota was reached—wait a few minutes before retrying.
+- **Service cannot find your shoe name?** Confirm the shoe exists in the Shoes Catalog sensor and that the name matches exactly (case sensitive).
 
 ## Topics
 
