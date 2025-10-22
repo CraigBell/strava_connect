@@ -35,7 +35,7 @@ Strava Connect keeps your Home Assistant instance in sync with Strava: it stream
 
 ## What's New
 
-- **v0.12** – Introduced the Stryd pod ↔ shoe helper workflow and the new dynamic shoes catalog sensor, making gear management first class inside Home Assistant.
+- **v0.13** – Adds full athlete gear sync, the `ha_strava.set_activity_gear` service, and stricter OAuth scope enforcement with rate-limit handling.
 
 ## Documentation & Support
 
