@@ -11,7 +11,9 @@ from custom_components.ha_strava.const import (
     CONF_ACTIVITY_TYPES_TO_TRACK,
     CONF_ATTR_DEVICE_NAME,
     CONF_ATTR_DEVICE_TYPE,
+    CONF_GRANTED_SCOPES,
     DOMAIN,
+    REQUIRED_STRAVA_SCOPES,
     SUPPORTED_ACTIVITY_TYPES,
 )
 
@@ -28,6 +30,7 @@ def mock_config_entry():
         data={
             CONF_CLIENT_ID: "test_client_id",
             CONF_CLIENT_SECRET: "test_client_secret",
+            CONF_GRANTED_SCOPES: REQUIRED_STRAVA_SCOPES,
             "token": {
                 "access_token": "test_access_token",
                 "refresh_token": "test_refresh_token",
@@ -51,6 +54,7 @@ def mock_config_entry_all_activities():
         data={
             CONF_CLIENT_ID: "test_client_id",
             CONF_CLIENT_SECRET: "test_client_secret",
+            CONF_GRANTED_SCOPES: REQUIRED_STRAVA_SCOPES,
             CONF_ACTIVITY_TYPES_TO_TRACK: SUPPORTED_ACTIVITY_TYPES,
             "token": {
                 "access_token": "test_access_token",

@@ -1,6 +1,6 @@
 """Test config flow for ha_strava."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.const import CONF_CLIENT_ID, CONF_CLIENT_SECRET
@@ -15,9 +15,11 @@ from custom_components.ha_strava.const import (
     CONF_ACTIVITY_TYPES_TO_TRACK,
     CONF_DISTANCE_UNIT_OVERRIDE,
     CONF_DISTANCE_UNIT_OVERRIDE_DEFAULT,
+    CONF_GRANTED_SCOPES,
     CONF_IMG_UPDATE_INTERVAL_SECONDS,
     CONF_PHOTOS,
     DEFAULT_ACTIVITY_TYPES,
+    REQUIRED_STRAVA_SCOPES,
     SUPPORTED_ACTIVITY_TYPES,
 )
 
@@ -200,6 +202,74 @@ class TestStravaConfigFlow:
             "InvalidType1",
             "InvalidType2",
         ]
+
+    @pytest.mark.asyncio
+    async def test_oauth_create_entry_fails_without_required_scopes(
+        self, hass: HomeAssistant
+    ):
+        """Missing scopes should abort the flow."""
+        async for hass_instance in hass:
+            hass = hass_instance
+            break
+
+        flow = OAuth2FlowHandler()
+        flow.hass = hass
+
+        result = await flow.async_oauth_create_entry(
+            {
+                "token": {
+                    "scope": "read,read_all",
+                    "access_token": "token",
+                }
+            }
+        )
+
+        assert result["type"] == FlowResultType.ABORT
+        assert result["reason"] == "missing_scopes"
+
+    @pytest.mark.asyncio
+    async def test_oauth_create_entry_stores_scopes(self, hass: HomeAssistant):
+        """Successful OAuth should store granted scopes on the entry."""
+        async for hass_instance in hass:
+            hass = hass_instance
+            break
+
+        flow = OAuth2FlowHandler()
+        flow.hass = hass
+
+        session = AsyncMock()
+        response = AsyncMock()
+        response.status = 200
+        response.json.return_value = {
+            "id": 42,
+            "firstname": "Craig",
+            "lastname": "Bell",
+        }
+        get_cm = AsyncMock()
+        get_cm.__aenter__.return_value = response
+        session.get.return_value = get_cm
+
+        with patch(
+            "custom_components.ha_strava.config_flow.aiohttp.ClientSession"
+        ) as mock_session, patch.object(
+            flow, "async_set_unique_id", AsyncMock()
+        ), patch.object(
+            flow, "_abort_if_unique_id_configured"
+        ):
+            mock_session.return_value.__aenter__.return_value = session
+            mock_session.return_value.__aexit__.return_value = AsyncMock()
+
+            result = await flow.async_oauth_create_entry(
+                {
+                    "token": {
+                        "scope": ",".join(REQUIRED_STRAVA_SCOPES),
+                        "access_token": "token",
+                    },
+                }
+            )
+
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        assert result["data"][CONF_GRANTED_SCOPES] == REQUIRED_STRAVA_SCOPES
 
     @pytest.mark.asyncio
     async def test_options_step_mixed_valid_invalid_types(

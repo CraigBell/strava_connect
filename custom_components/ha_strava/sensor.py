@@ -13,10 +13,16 @@ from .const import (
     CONF_ACTIVITY_TYPES_TO_TRACK,
     CONF_ATTR_ACTIVITY_ID,
     CONF_ATTR_ACTIVITY_URL,
+    CONF_ATTR_BIKES,
+    CONF_ATTR_CATALOG_TIMESTAMP,
     CONF_ATTR_COMMUTE,
     CONF_ATTR_LOCATION,
+    CONF_ATTR_POD_1_SHOE,
+    CONF_ATTR_POD_2_SHOE,
+    CONF_ATTR_POD_CONFLICT,
     CONF_ATTR_POLYLINE,
     CONF_ATTR_PRIVATE,
+    CONF_ATTR_SHOES,
     CONF_ATTR_SPORT_TYPE,
     CONF_ATTR_START_LATLONG,
     CONF_ATTRIBUTE_SENSOR_TYPES,
@@ -73,6 +79,7 @@ from .const import (
     normalize_activity_type,
 )
 from .coordinator import StravaDataUpdateCoordinator
+from .gear import enforce_mutual_exclusivity, resolve_shoes_for_pod
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -182,6 +189,14 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         )
     )
 
+    # Create shoes catalog sensor for global gear visibility
+    entries.append(
+        StravaShoesCatalogSensor(
+            coordinator,
+            athlete_id=athlete_id,
+        )
+    )
+
     # Create summary statistics sensors (one global device)
     # Break down totals into individual metric sensors
     summary_stats_sensors = []
@@ -234,6 +249,89 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         )
 
     async_add_entities(entries)
+
+
+class StravaShoesCatalogSensor(CoordinatorEntity, SensorEntity):
+    """Sensor exposing Strava shoes catalog and helper selections."""
+
+    _attr_icon = "mdi:shoe-sneaker"
+    _attr_has_entity_name = True
+
+    POD_1_ENTITY_ID = "input_select.stryd_pod_1_shoes"
+    POD_2_ENTITY_ID = "input_select.stryd_pod_2_shoes"
+
+    def __init__(self, coordinator: StravaDataUpdateCoordinator, athlete_id: str):
+        super().__init__(coordinator)
+        self._athlete_id = athlete_id
+        self._athlete_name = get_athlete_name_from_title(self.coordinator.entry.title)
+        self._attr_unique_id = f"strava_{athlete_id}_shoes_catalog"
+        self._attr_name = f"Strava {self._athlete_name} Shoes Catalog"
+
+    def _catalog(self) -> dict:
+        return (self.coordinator.data or {}).get("shoes_catalog", {})
+
+    @property
+    def native_value(self) -> str | None:
+        catalog = self._catalog()
+        return catalog.get(CONF_ATTR_CATALOG_TIMESTAMP) or catalog.get("last_refresh")
+
+    @property
+    def device_info(self) -> dict:
+        return {
+            "identifiers": {(DOMAIN, f"{self._athlete_id}_gear")},
+            "name": f"Strava {self._athlete_name} Gear",
+            "manufacturer": "Strava",
+        }
+
+    def _get_helper_selection(self, entity_id: str) -> str | None:
+        if self.hass is None:
+            return None
+
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            return None
+
+        value = getattr(state, "state", None)
+        if not value or value in {"unknown", "unavailable"}:
+            return None
+        return value
+
+    def extra_state_attributes(self) -> dict:
+        catalog = self._catalog()
+        timestamp = catalog.get(CONF_ATTR_CATALOG_TIMESTAMP) or catalog.get(
+            "last_refresh"
+        )
+
+        shoes = [dict(shoe) for shoe in catalog.get(CONF_ATTR_SHOES, [])]
+        bikes = [dict(bike) for bike in catalog.get(CONF_ATTR_BIKES, [])]
+
+        pod1_selection_raw = self._get_helper_selection(self.POD_1_ENTITY_ID)
+        pod2_selection_raw = self._get_helper_selection(self.POD_2_ENTITY_ID)
+
+        enforced_pod1, enforced_pod2 = enforce_mutual_exclusivity(
+            pod1_selection_raw, pod2_selection_raw
+        )
+        pod1_shoe = resolve_shoes_for_pod("pod_1", shoes, enforced_pod1)
+        pod2_shoe = resolve_shoes_for_pod("pod_2", shoes, enforced_pod2)
+        if pod1_shoe is not None:
+            pod1_shoe = dict(pod1_shoe)
+        if pod2_shoe is not None:
+            pod2_shoe = dict(pod2_shoe)
+
+        conflict = bool(
+            pod1_selection_raw
+            and pod2_selection_raw
+            and pod1_selection_raw == pod2_selection_raw
+        )
+
+        return {
+            CONF_ATTR_CATALOG_TIMESTAMP: timestamp,
+            CONF_ATTR_SHOES: shoes,
+            CONF_ATTR_BIKES: bikes,
+            CONF_ATTR_POD_1_SHOE: pod1_shoe,
+            CONF_ATTR_POD_2_SHOE: pod2_shoe,
+            CONF_ATTR_POD_CONFLICT: conflict,
+        }
 
 
 class StravaSummaryStatsSensor(CoordinatorEntity, SensorEntity):

@@ -14,6 +14,7 @@ from custom_components.ha_strava.const import (
     CONF_ATTR_ACTIVITY_ID,
     CONF_ATTR_POD_1_SHOE,
     CONF_ATTR_POD_2_SHOE,
+    CONF_ATTR_POD_CONFLICT,
     CONF_ATTR_SHOES,
     CONF_DISTANCE_UNIT_OVERRIDE,
     CONF_DISTANCE_UNIT_OVERRIDE_METRIC,
@@ -598,6 +599,7 @@ class TestStravaShoesCatalogSensor:
 
         assert attributes[CONF_ATTR_POD_1_SHOE]["name"] == "Daily Trainer"
         assert attributes[CONF_ATTR_POD_2_SHOE] is None
+        assert attributes[CONF_ATTR_POD_CONFLICT] is True
 
     def test_distinct_pod_selections(self):
         """Different helper selections should both resolve to shoes."""
@@ -634,6 +636,7 @@ class TestStravaShoesCatalogSensor:
 
         assert attributes[CONF_ATTR_POD_1_SHOE]["name"] == "Daily Trainer"
         assert attributes[CONF_ATTR_POD_2_SHOE]["name"] == "Tempo Shoe"
+        assert attributes[CONF_ATTR_POD_CONFLICT] is False
 
     @pytest.mark.asyncio
     async def test_async_setup_entry_empty_activity_types(self, hass: HomeAssistant):

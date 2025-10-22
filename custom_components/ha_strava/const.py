@@ -9,6 +9,16 @@ CONFIG_ENTRY_TITLE = "Strava"
 AUTH_CALLBACK_PATH = "/auth/external/callback"
 OAUTH2_AUTHORIZE = "https://www.strava.com/oauth/authorize"
 OAUTH2_TOKEN = "https://www.strava.com/oauth/token"
+CONF_GRANTED_SCOPES = "granted_scopes"
+STRAVA_SCOPE_SEPARATOR = ","
+REQUIRED_STRAVA_SCOPES = [
+    "read",
+    "read_all",
+    "profile:read_all",
+    "activity:read_all",
+    "activity:write",
+]
+REQUIRED_SCOPE_STRING = ",".join(REQUIRED_STRAVA_SCOPES)
 
 # Camera Config
 CONF_PHOTOS = "conf_photos"
@@ -45,6 +55,7 @@ CONF_IMG_ROTATE_EVENT = "ha_strava_rotate_images"
 EVENT_ACTIVITIES_UPDATE = "ha_strava_activities_update"
 EVENT_ACTIVITY_IMAGES_UPDATE = "ha_strava_activity_images_update"
 EVENT_SUMMARY_STATS_UPDATE = "ha_strava_stats_update"
+EVENT_ACTIVITY_GEAR_SET = "ha_strava.activity_gear_set"
 
 # Sensor Specs
 CONF_SENSOR_ID = "id"
@@ -456,6 +467,12 @@ CONF_ATTR_ATHLETE_URL = "athlete_url"
 CONF_ATTR_COMMUTE = "commute"
 CONF_ATTR_PRIVATE = "private"
 CONF_ATTR_POLYLINE = "polyline"
+CONF_ATTR_SHOES = "shoes"
+CONF_ATTR_BIKES = "bikes"
+CONF_ATTR_CATALOG_TIMESTAMP = "catalog_timestamp"
+CONF_ATTR_POD_1_SHOE = "pod_1_shoe"
+CONF_ATTR_POD_2_SHOE = "pod_2_shoe"
+CONF_ATTR_POD_CONFLICT = "pod_conflict"
 
 # Device Source Tracking
 CONF_ATTR_DEVICE_NAME = "device_name"
@@ -467,6 +484,11 @@ UNIT_PACE_MINUTES_PER_KILOMETER = "min/km"
 UNIT_PACE_MINUTES_PER_MILE = "min/mi"
 UNIT_KILO_CALORIES = "kcal"
 UNIT_STEPS_PER_MINUTE = "spm"
+
+SERVICE_SET_ACTIVITY_GEAR = "set_activity_gear"
+ATTR_ACTIVITY_ID = "activity_id"
+ATTR_SHOE_ID = "shoe_id"
+ATTR_SHOE_NAME = "shoe_name"
 
 
 # Naming Helper Functions

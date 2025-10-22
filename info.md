@@ -14,8 +14,8 @@ Strava Connect links your Strava account with Home Assistant so you can monitor 
 
 ## Installation
 
-Install through [HACS](https://hacs.xyz/) by adding `craibo/ha_strava`, download the integration, restart Home Assistant, and configure it from **Settings → Devices & Services** using your Strava API credentials. The integration domain remains `ha_strava`.
+Install through [HACS](https://hacs.xyz/) by adding `CraigBell/strava_connect`, download the integration, restart Home Assistant, and configure it from **Settings → Devices & Services** using your Strava API credentials. The integration domain remains `ha_strava`.
 
 ## Release Spotlight
 
-- **v0.12** – Added the Stryd pod ↔ shoe helper workflow and the fully dynamic shoes catalog sensor.
+- **v0.13** – Delivers athlete gear sync, the `ha_strava.set_activity_gear` write service, and guardrails for OAuth scopes and rate limits.

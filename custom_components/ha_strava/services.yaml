@@ -1,0 +1,14 @@
+set_activity_gear:
+  name: Set Activity Gear
+  description: Assign a Strava shoe to an existing activity.
+  fields:
+    activity_id:
+      description: Strava activity id to update.
+      example: "1234567890"
+      required: true
+    shoe_id:
+      description: Strava gear id to assign (mutually exclusive with shoe_name).
+      example: "g1234567"
+    shoe_name:
+      description: Shoe name to resolve from the catalog (mutually exclusive with shoe_id).
+      example: "Nike Pegasus 40"
