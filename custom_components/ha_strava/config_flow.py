@@ -293,6 +293,7 @@ class OAuth2FlowHandler(
                     user_input[CONF_CLIENT_SECRET],
                     OAUTH2_AUTHORIZE,
                     OAUTH2_TOKEN,
+                    scopes=REQUIRED_STRAVA_SCOPES,
                 ),
             )
             return await self.async_step_pick_implementation()

@@ -57,6 +57,7 @@ from .const import (
     FACTOR_KILOJOULES_TO_KILOCALORIES,
     OAUTH2_AUTHORIZE,
     OAUTH2_TOKEN,
+    REQUIRED_STRAVA_SCOPES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -88,6 +89,7 @@ class StravaDataUpdateCoordinator(DataUpdateCoordinator):
                 entry.data[CONF_CLIENT_SECRET],
                 OAUTH2_AUTHORIZE,
                 OAUTH2_TOKEN,
+                scopes=REQUIRED_STRAVA_SCOPES,
             ),
         )
         self.client = StravaClient(self.oauth_session)

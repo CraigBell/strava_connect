@@ -68,6 +68,9 @@ class TestStravaConfigFlow:
                 assert result["type"] == FlowResultType.EXTERNAL_STEP
                 assert "url" in result
 
+                implementation = mock_register.call_args[0][2]
+                assert set(implementation.scopes) == set(REQUIRED_STRAVA_SCOPES)
+
     @pytest.mark.asyncio
     async def test_oauth_step_success(self, hass: HomeAssistant):
         """Test successful OAuth step."""
