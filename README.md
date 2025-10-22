@@ -35,7 +35,7 @@ Strava Connect keeps your Home Assistant instance in sync with Strava: it stream
 
 ## What's New
 
-- **v0.13** – Adds full athlete gear sync, the `ha_strava.set_activity_gear` service, and stricter OAuth scope enforcement with rate-limit handling.
+- **v0.14** – Ensures the Strava auth flow explicitly requests the full gear read/write scope set so shoes and activity updates work immediately after install.
 
 ## Documentation & Support
 
