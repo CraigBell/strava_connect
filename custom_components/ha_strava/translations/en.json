@@ -7,7 +7,8 @@
     "abort": {
       "already_configured": "Strava Connect has already been installed. You can only have one installation at a time",
       "no_public_url": "Your Home Assistant instance does not seem to have a public URL. Strava Connect requires a public URL",
-      "webhook_fail": "Strava Connect failed to subscribe to the Strava webhook"
+      "webhook_fail": "Strava Connect failed to subscribe to the Strava webhook",
+      "missing_scopes": "The Strava authorization is missing required permissions. Please reauthorize with the full scope list."
     },
     "step": {
       "get_oauth_info": {

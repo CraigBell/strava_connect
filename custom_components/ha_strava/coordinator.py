@@ -3,6 +3,7 @@
 import json
 import logging
 from datetime import datetime as dt
+from datetime import timezone
 from typing import Tuple
 
 import aiohttp
@@ -10,12 +11,16 @@ from homeassistant.const import CONF_CLIENT_ID, CONF_CLIENT_SECRET
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from .api import StravaApiError, StravaClient, StravaRateLimitError
 from .const import (
     CONF_ACTIVITY_TYPES_TO_TRACK,
+    CONF_ATTR_BIKES,
+    CONF_ATTR_CATALOG_TIMESTAMP,
     CONF_ATTR_COMMUTE,
     CONF_ATTR_END_LATLONG,
     CONF_ATTR_POLYLINE,
     CONF_ATTR_PRIVATE,
+    CONF_ATTR_SHOES,
     CONF_ATTR_SPORT_TYPE,
     CONF_ATTR_START_LATLONG,
     CONF_PHOTOS,
@@ -52,6 +57,7 @@ from .const import (
     FACTOR_KILOJOULES_TO_KILOCALORIES,
     OAUTH2_AUTHORIZE,
     OAUTH2_TOKEN,
+    REQUIRED_STRAVA_SCOPES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -83,8 +89,10 @@ class StravaDataUpdateCoordinator(DataUpdateCoordinator):
                 entry.data[CONF_CLIENT_SECRET],
                 OAUTH2_AUTHORIZE,
                 OAUTH2_TOKEN,
+                scopes=REQUIRED_STRAVA_SCOPES,
             ),
         )
+        self.client = StravaClient(self.oauth_session)
         self.image_updates = {}
         super().__init__(
             hass,
@@ -103,16 +111,36 @@ class StravaDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             await self.oauth_session.async_ensure_token_valid()
 
+            athlete_profile = await self.client.async_get_athlete()
             athlete_id, activities = await self._fetch_activities()
             raw_summary_stats = await self._fetch_summary_stats(athlete_id)
             summary_stats = self._sensor_summary_stats(raw_summary_stats)
             images = await self._fetch_images(activities)
+            catalog_timestamp = (
+                dt.now(timezone.utc)
+                .replace(microsecond=0)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
+            shoes_catalog = {
+                CONF_ATTR_CATALOG_TIMESTAMP: catalog_timestamp,
+                "last_refresh": catalog_timestamp,
+                CONF_ATTR_SHOES: athlete_profile.get("shoes", []),
+                CONF_ATTR_BIKES: athlete_profile.get("bikes", []),
+            }
 
             return {
+                "athlete": athlete_profile,
                 "activities": activities,
                 "summary_stats": summary_stats,
                 "images": images,
+                "shoes_catalog": shoes_catalog,
             }
+        except StravaRateLimitError as err:
+            raise UpdateFailed("Strava API rate limit reached") from err
+        except StravaApiError as err:
+            _LOGGER.error("Strava API error: %s", err)
+            raise UpdateFailed(f"Strava API error: {err}") from err
         except aiohttp.ClientError as err:
             _LOGGER.error(f"Error communicating with API: {err}")
             raise UpdateFailed(f"Error communicating with API: {err}") from err
