@@ -19,3 +19,4 @@ Install through [HACS](https://hacs.xyz/) by adding `CraigBell/strava_connect`, 
 ## Release Spotlight
 
 - **v0.14** – Fixes the OAuth flow so Strava always grants the full gear read/write scope set required for catalog sync and activity updates.
+- **v0.13** – Delivers athlete gear sync, the `ha_strava.set_activity_gear` write service, and guardrails for OAuth scopes and rate limits.
